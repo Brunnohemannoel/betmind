@@ -1,0 +1,100 @@
+18eeb4f chore: remove .lovable da arvore do git e ignora no gitignore
+f76cb22 docs: atualiza README e configura build para subdiretorio /esportesorte/
+504e635 docs: expand AI Agent description (features and learning mode)
+a0c6452 docs: clean up project references and add professional README.md
+2d46898 initial commit: BetMind AI - core system (cleaned)
+
+
+On branch main
+Your branch is ahead of 'origin/main' by 2 commits.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add/rm <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	deleted:    public/matches/11/1.json
+	deleted:    public/matches/11/2.json
+	deleted:    public/matches/11/21.json
+	deleted:    public/matches/11/22.json
+	deleted:    public/matches/11/23.json
+	deleted:    public/matches/11/24.json
+	deleted:    public/matches/11/25.json
+	deleted:    public/matches/11/26.json
+	deleted:    public/matches/11/27.json
+	deleted:    public/matches/11/278.json
+	deleted:    public/matches/11/37.json
+	deleted:    public/matches/11/38.json
+	deleted:    public/matches/11/39.json
+	deleted:    public/matches/11/4.json
+	deleted:    public/matches/11/40.json
+	deleted:    public/matches/11/41.json
+	deleted:    public/matches/11/42.json
+	deleted:    public/matches/11/90.json
+	deleted:    public/matches/116/68.json
+	deleted:    public/matches/12/27.json
+	deleted:    public/matches/12/86.json
+	deleted:    public/matches/1238/108.json
+	deleted:    public/matches/1267/107.json
+	deleted:    public/matches/1470/274.json
+	deleted:    public/matches/16/1.json
+	deleted:    public/matches/16/2.json
+	deleted:    public/matches/16/21.json
+	deleted:    public/matches/16/22.json
+	deleted:    public/matches/16/23.json
+	deleted:    public/matches/16/24.json
+	deleted:    public/matches/16/25.json
+	deleted:    public/matches/16/26.json
+	deleted:    public/matches/16/27.json
+	deleted:    public/matches/16/276.json
+	deleted:    public/matches/16/277.json
+	deleted:    public/matches/16/37.json
+	deleted:    public/matches/16/39.json
+	deleted:    public/matches/16/4.json
+	deleted:    public/matches/16/41.json
+	deleted:    public/matches/16/44.json
+	deleted:    public/matches/16/71.json
+	deleted:    public/matches/16/76.json
+	deleted:    public/matches/2/27.json
+	deleted:    public/matches/2/44.json
+	deleted:    public/matches/223/282.json
+	deleted:    public/matches/35/75.json
+	deleted:    public/matches/37/4.json
+	deleted:    public/matches/37/42.json
+	deleted:    public/matches/37/90.json
+	deleted:    public/matches/43/106.json
+	deleted:    public/matches/43/269.json
+	deleted:    public/matches/43/270.json
+	deleted:    public/matches/43/272.json
+	deleted:    public/matches/43/3.json
+	deleted:    public/matches/43/51.json
+	deleted:    public/matches/43/54.json
+	deleted:    public/matches/43/55.json
+	deleted:    public/matches/44/107.json
+	deleted:    public/matches/49/3.json
+	deleted:    public/matches/53/106.json
+	deleted:    public/matches/53/315.json
+	deleted:    public/matches/55/282.json
+	deleted:    public/matches/55/43.json
+	deleted:    public/matches/7/108.json
+	deleted:    public/matches/7/235.json
+	deleted:    public/matches/7/27.json
+	deleted:    public/matches/72/107.json
+	deleted:    public/matches/72/30.json
+	deleted:    public/matches/81/275.json
+	deleted:    public/matches/81/48.json
+	deleted:    public/matches/87/268.json
+	deleted:    public/matches/87/279.json
+	deleted:    public/matches/87/84.json
+	deleted:    public/matches/9/27.json
+	deleted:    public/matches/9/281.json
+	modified:   scripts/ingest_historical_data.ts
+	modified:   src/index.css
+	modified:   src/pages/Index.tsx
+	modified:   supabase/functions/betsapi-live/index.ts
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	betmind-dist/
+	data/
+
+no changes added to commit (use "git add" and/or "git commit -a")

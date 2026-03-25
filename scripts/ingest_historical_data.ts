@@ -54,8 +54,8 @@ async function insertTeamSingle(name: string): Promise<string | null> {
 
 async function main() {
   console.log('=== BetMind - Integração de Dados Históricos ===\n');
-  const matchesDir = path.resolve(process.cwd(), 'public', 'matches');
-  const eventsDir = path.resolve(process.cwd(), 'public', 'events');
+  const matchesDir = path.resolve(process.cwd(), 'data', 'matches');
+  const eventsDir = path.resolve(process.cwd(), 'data', 'events');
   const cache = loadCache();
   const teamNameToDbId: Record<string, string> = cache.teams;
   const extMatchToDbId: Record<string, string> = cache.matches;

@@ -162,7 +162,7 @@ const sportsMenu: { key: SportKey; label: string }[] = [
 
 const leftMenu = ["Meus Favoritos", "Alertas IA", "Minhas Apostas"];
 
-const defaultLogo = `${import.meta.env.BASE_URL}placeholder.svg`;
+const defaultLogo = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m12 16 4-3-1-5H9l-1 5 4 3z'/%3E%3Cpath d='m9 8-4.5-2.5'/%3E%3Cpath d='m15 8 4.5-2.5'/%3E%3Cpath d='m16 13 4 3'/%3E%3Cpath d='m8 13-4 3'/%3E%3Cpath d='M12 16v6'/%3E%3C/svg%3E";
 
 const statusLabel: Record<MatchStatus, string> = {
   live: "Ao vivo",
@@ -807,6 +807,52 @@ const Index = () => {
     };
   }, [fetchLiveData]);
 
+  // 🧠 Integração com o Agente IA Python em http://191.252.100.73:8000
+  // Roda a cada 15s para jogos LIVE e na montagem para UPCOMING
+  useEffect(() => {
+    const allTargets = [...agenda.live, ...agenda.upcoming];
+    if (allTargets.length === 0) return;
+    let cancelled = false;
+
+    const enrichAll = async () => {
+      if (cancelled) return;
+      
+      const [liveEnriched, upcomingEnriched] = await Promise.all([
+        Promise.all(agenda.live.map(callAiAgent)),
+        Promise.all(agenda.upcoming.map(callAiAgent)),
+      ]);
+
+      if (!cancelled) {
+        setAgenda((prev) => ({
+          ...prev,
+          live: liveEnriched as typeof prev.live,
+          upcoming: upcomingEnriched as typeof prev.upcoming,
+        }));
+      }
+    };
+
+    enrichAll();
+    
+    const liveTimer = setInterval(async () => {
+      if (cancelled || agenda.live.length === 0) return;
+      const liveEnriched = await Promise.all(agenda.live.map(callAiAgent));
+      if (!cancelled) setAgenda((prev) => ({ ...prev, live: liveEnriched as typeof prev.live }));
+    }, 15000);
+
+    const upcomingTimer = setInterval(async () => {
+      if (cancelled || agenda.upcoming.length === 0) return;
+      const upcomingEnriched = await Promise.all(agenda.upcoming.map(callAiAgent));
+      if (!cancelled) setAgenda((prev) => ({ ...prev, upcoming: upcomingEnriched as typeof prev.upcoming }));
+    }, 120000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(liveTimer);
+      clearInterval(upcomingTimer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agenda.live.length + agenda.upcoming.length]);
+
   const allMatches = useMemo(() => [...agenda.live, ...agenda.upcoming, ...agenda.finished], [agenda]);
 
   const suggestedMultiples = useMemo(() => {
@@ -1173,10 +1219,94 @@ const Index = () => {
     cards: { label: "Cartões", color: "hsl(var(--destructive))" },
   };
 
-  const openAiAnalysis = (match: MatchItem) => {
+  const callAiAgent = useCallback(async (match: MatchItem): Promise<MatchItem> => {
+    try {
+      const body = {
+        match_id: match.id !== "undefined" ? match.id : `${match.home}-${match.away}`.toLowerCase().replace(/\s+/g, ""),
+        minute: match.minute ?? 0,
+        home_team: match.home,
+        away_team: match.away,
+        shots_on_target: null,
+        dangerous_attacks: null,
+        corners: null,
+      };
+
+      const AI_AGENT_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+        ? "http://127.0.0.1:8000/analyze"
+        : "http://191.252.100.73:8000/analyze";
+
+      const res = await fetch(AI_AGENT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+
+      if (!res.ok) return match;
+
+      const py: {
+        intensity: number;
+        goal_probability: number;
+        win_home: number;
+        win_draw: number;
+        win_away: number;
+        suggestion: string;
+        insight: string;
+        confidence: number;
+        alerts: string[];
+      } = await res.json();
+
+      return {
+        ...match,
+        intensityScore: py.intensity,
+        ai: {
+          ...match.ai,
+          pressure: py.intensity,
+          winHome: py.win_home,
+          winDraw: py.win_draw,
+          winAway: py.win_away,
+          goalNext10: Math.round(py.goal_probability * 100),
+          confidence: py.confidence,
+          statusSignals: {
+            ...match.ai.statusSignals,
+            pressure: py.intensity,
+          },
+          bestBet: {
+            ...match.ai.bestBet,
+            confidence: py.confidence,
+          },
+          insight: py.insight,
+          suggestion: py.suggestion,
+          alerts: py.alerts,
+        },
+      };
+
+    } catch (err) {
+      console.error("AI Agent error:", err);
+      return match;
+    }
+  }, []);
+
+  const openAiAnalysis = async (match: MatchItem) => {
+    // Mostra o modal imediatamente com o que temos
     setAnalysisMatch(match);
     setAnalysisOpen(true);
+    
+    // Busca atualização fresca
+    const updated = await callAiAgent(match);
+    setAnalysisMatch(updated);
+    
+    // Também atualiza na lista principal para persistir a mudança de UI
+    setAgenda(prev => {
+      const updateList = (list: MatchItem[]) => list.map(m => m.id === match.id ? updated : m);
+      return {
+        live: updateList(prev.live),
+        upcoming: updateList(prev.upcoming),
+        finished: updateList(prev.finished)
+      };
+    });
   };
+
 
   const openMatchFromAlert = useCallback(
     (alert: UiAlert) => {

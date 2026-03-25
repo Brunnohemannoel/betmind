@@ -26,6 +26,17 @@ type NormalizedMatch = {
   bttsNo: number | null;
   otherMarketCount: number;
   isHot: boolean;
+  ai: {
+    intensity: number;
+    goalProb: number;
+    confidence: number;
+    suggestion: string;
+    alert: string;
+    stats?: {
+      home: { attacks: number; dangerousAttacks: number; possession: number; onTarget: number; offTarget: number; corners: number };
+      away: { attacks: number; dangerousAttacks: number; possession: number; onTarget: number; offTarget: number; corners: number };
+    };
+  };
 };
 
 type AiRiskLevel = "low" | "medium" | "high";
@@ -143,6 +154,66 @@ const computeUrgency = ({
   if (isCriticalWindow) return { urgencyLevel: "urgent", isCriticalWindow: true };
   if (minute >= 70) return { urgencyLevel: "attention", isCriticalWindow: false };
   return { urgencyLevel: "normal", isCriticalWindow: false };
+};
+
+const parseStats = (event: RawEvent) => {
+  const stats = event?.stats || {};
+  const getVal = (arr: any, idx: number) => toNumber(Array.isArray(arr) ? arr[idx] : 0, 0);
+  
+  return {
+    home: {
+      attacks: getVal(stats.attacks, 0),
+      dangerousAttacks: getVal(stats.dangerous_attacks, 0),
+      possession: getVal(stats.possession_rt, 0),
+      onTarget: getVal(stats.on_target, 0),
+      offTarget: getVal(stats.off_target, 0),
+      corners: getVal(stats.corners, 0),
+    },
+    away: {
+      attacks: getVal(stats.attacks, 1),
+      dangerousAttacks: getVal(stats.dangerous_attacks, 1),
+      possession: getVal(stats.possession_rt, 1),
+      onTarget: getVal(stats.on_target, 1),
+      offTarget: getVal(stats.off_target, 1),
+      corners: getVal(stats.corners, 1),
+    }
+  };
+};
+
+const calculateAiInsights = (stats: any, minute: number) => {
+  const h = stats.home;
+  const a = stats.away;
+  
+  // Fórmula sugerida pelo usuário: (chutes_no_gol * 3) + (escanteios * 2) + (ataques_perigosos * 2)
+  const intensityHome = (h.onTarget * 3) + (h.corners * 2) + (h.dangerousAttacks * 2);
+  const intensityAway = (a.onTarget * 3) + (a.corners * 2) + (a.dangerousAttacks * 2);
+  const totalIntensity = Math.min(100, (intensityHome + intensityAway) / (minute > 0 ? (minute / 10) : 1)); // Normalizado por tempo
+  
+  const factorTempo = minute > 75 ? 1.2 : minute > 45 ? 1.0 : 0.8;
+  const goalProb = Math.min(100, (totalIntensity / 100) * factorTempo * 100);
+  
+  let suggestion = "Aguardando Padrão";
+  let confidence = 50;
+  let alert = "Ritmo Calmo";
+
+  if (goalProb > 75) {
+    suggestion = "Over 1.5 Gols";
+    confidence = Math.round(goalProb * 0.9);
+    alert = "🔥 Jogo Quente";
+  } else if (goalProb > 50) {
+    suggestion = "Over 0.5 Gols HT";
+    confidence = Math.round(goalProb * 0.85);
+    alert = "⚡ Pressão Média";
+  }
+
+  return {
+    intensity: Math.round(totalIntensity),
+    goalProb: Math.round(goalProb),
+    confidence,
+    suggestion,
+    alert,
+    stats
+  };
 };
 
 const resolveFootballPhase = (minute: number, status: NormalizedMatch["status"]) => {
@@ -452,6 +523,9 @@ const normalizeCore = (
   const extraMarkets = inferExtraMarkets(event);
   const statusDetail = inferStatusDetail(event, status);
   const kickoffAt = parseKickoff(event);
+  
+  const stats = parseStats(event);
+  const ai = calculateAiInsights(stats, minute);
 
   const hotSignals = [
     status === "live",
@@ -481,7 +555,8 @@ const normalizeCore = (
     bttsYes: extraMarkets.bttsYes,
     bttsNo: extraMarkets.bttsNo,
     otherMarketCount: extraMarkets.otherMarketCount,
-    isHot: hotSignals >= 3,
+    isHot: hotSignals >= 2,
+    ai,
   };
 };
 
