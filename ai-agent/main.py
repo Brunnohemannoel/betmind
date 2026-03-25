@@ -251,18 +251,89 @@ def analyze_match(req: AnalyzeRequest, db=Depends(get_db)):
     else:
         insight = f"📊 Jogo equilibrado: {trend_text} e {pressure_text}. Ideal para análise de mercados de escanteios ou 'live betting'."
 
+    # Cálculos de chances de eventos
+    goal_chance = int(prob_gol * 100)
+    # Heurística para escanteios/cartões baseada na intensidade e minuto
+    minuto = req.minute or 0
+    corner_chance = min(95, int(45 + (intensidade * 0.4) + (minuto / 10)))
+    card_chance = min(90, int(20 + (intensidade * 0.3) + (minuto / 5)))
+
+    # Melhor Aposta e Justificativa
+    if prob_gol > 0.7:
+        bb_market = "Over 1.5 gols"
+        bb_rationale = f"Ritmo altíssimo e {pressure_text}. O gol é iminente."
+    elif base_home > 55:
+        bb_market = f"Vencedor: {req.home_team if req.home_team else 'Casa'}"
+        bb_rationale = f"Dominância estatística clara do mandante com {pressure_text}."
+    elif base_away > 55:
+        bb_market = f"Vencedor: {req.away_team if req.away_team else 'Visitante'}"
+        bb_rationale = f"Visitante aproveitando melhor as brechas com {pressure_text}."
+    elif corner_chance > 80:
+        bb_market = "Over 9.5 Escanteios"
+        bb_rationale = f"Volume de ataques pelas laterais indica alta frequência de cantos."
+    else:
+        bb_market = "Under 3.5 gols"
+        bb_rationale = "Jogo equilibrado e defesas bem postadas no momento."
+
+    risk_level = "low" if confidence > 75 else "medium" if confidence > 45 else "high"
+
+    # Gera timelines simuladas para gráficos baseadas na intensidade atual
+    # No futuro, isso buscará dados históricos reais do banco
+    pressure_timeline = []
+    event_timeline = []
+    prob_timeline = []
+    
+    for i in range(1, 8):
+        # Gera flutuação ao redor da intensidade atual
+        step_min = (i * 15) - 10
+        p_val = max(0, min(100, intensidade + (i * 2) - 10))
+        pressure_timeline.append({"label": f"{step_min}'", "home": p_val, "away": 100 - p_val})
+        
+        # Eventos (Gols, Cantos, Cartões)
+        e_val = int(prob_gol * 100 * (i/10))
+        event_timeline.append({
+            "label": f"{step_min}'", 
+            "goals": int(e_val * 0.3), 
+            "corners": int(e_val * 0.7), 
+            "cards": int(e_val * 0.2)
+        })
+        
+        # Probabilidades Win/Draw/Loss
+        prob_timeline.append({
+            "label": f"{step_min}'", 
+            "home": base_home - (10-i), 
+            "draw": base_draw, 
+            "away": base_away + (10-i)
+        })
+
     output = {
         "intensity": int(intensidade),
         "goal_probability": round(float(prob_gol), 3),
         "win_home": int(base_home),
         "win_draw": int(base_draw),
         "win_away": int(base_away),
+        "goal_chance": goal_chance,
+        "corner_chance": corner_chance,
+        "card_chance": card_chance,
+        "best_bet": {
+            "market": bb_market,
+            "confidence": int(confidence),
+            "rationale": bb_rationale
+        },
+        "risk_level": risk_level,
+        "charts": {
+            "pressureTimeline": pressure_timeline,
+            "eventTimeline": event_timeline,
+            "probabilityTimeline": prob_timeline
+        },
         "suggestion": suggestion,
         "insight": insight,
         "confidence": int(confidence),
         "alerts": alerts,
-        "features_used": features,  # Debug info
+        "features_used": features,
     }
+
+
 
     # Cache Redis (TTL: 30s para live, 120s para pré-jogo)
     ttl = 30 if minuto > 0 else 120

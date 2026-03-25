@@ -1250,6 +1250,20 @@ const Index = () => {
         win_home: number;
         win_draw: number;
         win_away: number;
+        goal_chance: number;
+        corner_chance: number;
+        card_chance: number;
+        best_bet: {
+          market: string;
+          confidence: number;
+          rationale: string;
+        };
+        risk_level: "low" | "medium" | "high";
+        charts: {
+          pressureTimeline: any[];
+          eventTimeline: any[];
+          probabilityTimeline: any[];
+        };
         suggestion: string;
         insight: string;
         confidence: number;
@@ -1267,19 +1281,34 @@ const Index = () => {
           winAway: py.win_away,
           goalNext10: Math.round(py.goal_probability * 100),
           confidence: py.confidence,
+          riskLevel: py.risk_level,
+          eventChances: {
+            goal: py.goal_chance,
+            corner: py.corner_chance,
+            card: py.card_chance,
+          },
           statusSignals: {
             ...match.ai.statusSignals,
             pressure: py.intensity,
           },
           bestBet: {
             ...match.ai.bestBet,
-            confidence: py.confidence,
+            market: py.best_bet.market,
+            confidence: py.best_bet.confidence,
+            rationale: py.best_bet.rationale,
+          },
+          charts: {
+            pressureTimeline: py.charts.pressureTimeline,
+            eventTimeline: py.charts.eventTimeline,
+            probabilityTimeline: py.charts.probabilityTimeline,
           },
           insight: py.insight,
           suggestion: py.suggestion,
           alerts: py.alerts,
         },
       };
+
+
 
     } catch (err) {
       console.error("AI Agent error:", err);

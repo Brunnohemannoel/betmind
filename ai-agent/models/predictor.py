@@ -25,10 +25,19 @@ class Predictor:
         Ex: [corners, shots_on_target, dangerous_attacks, intensity]
         """
         if not hasattr(self.model, "classes_") or len(self.model.classes_) < 2:
-            return {
-                "prediction": 0,
-                "confidence": 50
-            }
+            # Fallback dinâmico se o modelo não estiver treinado
+            # Baseia-se na intensidade para dar variabilidade (min 30, max 95)
+            # features: [corners, shots_on_target, dangerous_attacks, intensity]
+            try:
+                intensity = features[3] if len(features) > 3 else 50
+                calc_confidence = 30 + (intensity * 0.6)
+                return {
+                    "prediction": 1 if intensity > 60 else 0,
+                    "confidence": float(min(95, max(30, calc_confidence)))
+                }
+            except:
+                return {"prediction": 0, "confidence": 50.0}
+
             
         try:
             feats = np.array(features).reshape(1, -1)
