@@ -1,3 +1,73 @@
-# Welcome to your Lovable project
+# 🧠 BetMind AI - A Inteligência por trás da sua Aposta
 
-TODO: Document your project here
+O **BetMind AI** é uma plataforma avançada de análise e gestão de apostas esportivas que combina algoritmos de inteligência artificial com uma experiência de usuário (UX) de alto nível. Desenvolvido para traders e apostadores que buscam precisão, o sistema oferece insights em tempo real para maximizar as chances de lucro.
+
+---
+
+## 🚀 Funcionalidades Principais
+
+### 🧠 Inteligência Artificial Preditiva
+- **Análise em Tempo Real**: Algoritmo que processa dados de jogos ao vivo para sugerir o melhor momento de entrada.
+- **Sugestora de Múltiplas**: Seções dedicadas para montagem automática de bilhetes:
+  - 🟢 **Múltipla Segura**: Foco em consistência com odds conservadoras.
+  - ⚡ **Múltipla Moderada**: Equilíbrio ideal entre risco e retorno.
+  - 🚀 **Múltipla Agressiva**: Para retornos explosivos baseados em tendências de zebra ou viradas.
+- **Avaliação de Risco**: Todo bilhete de aposta é analisado pela IA, que classifica o risco entre Baixo, Médio e Alto.
+
+### ⚽ Experiência de Aposta "Zero Fricção"
+- **Seleção Direta**: Aposte diretamente na lista de jogos com um clique nas odds (1X2).
+- **Bet Slip Inteligente**: Painel lateral (Desktop) ou gaveta (Mobile) que calcula automaticamente odds totais e retorno potencial.
+- **Micro-interações**: Feedback tátil (vibração) e animações suaves para uma experiência premium e profissional.
+
+### 💳 Gestão de Banca e Depósito
+- **Depósito Instantâneo via Pix**: Fluxo simulado completo com geração de QR Code e atualização de saldo em tempo real.
+- **Minhas Apostas**: Histórico persistente de todas as apostas realizadas, com abas para bilhetes "Em Andamento" e "Resolvidas".
+- **Simulador de Resultados**: Teste sua estratégia com botões de simulação de "Green" ou "Red" que atualizam sua banca instantaneamente.
+
+### 💎 Design Premium
+- **Interface Moderna**: Estética baseada em *Glassmorphism* e *Dark Mode*.
+- **Navegação Otimizada**: Cabeçalho de categorias e busca fixo (sticky) para agilidade na seleção de partidas.
+- **Gráficos Avançados**: Visualização de desempenho e estatísticas via Recharts.
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Frontend**: [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
+- **Linguagem**: [TypeScript](https://www.typescriptlang.org/)
+- **Estilização**: [Tailwind CSS](https://tailwindcss.com/)
+- **UI Components**: [Radix UI](https://www.radix-ui.com/) + [Shadcn UI](https://ui.shadcn.com/)
+- **Backend/Database**: [Supabase](https://supabase.com/)
+- **Ícones**: [Lucide React](https://lucide.dev/)
+- **Animações**: [Tailwind CSS Animate](https://github.com/jamiebuilds/tailwindcss-animate)
+
+---
+
+## 📦 Como Iniciar o Projeto
+
+1. **Clonar o repositório**:
+   ```bash
+   git clone https://github.com/Brunnohemannoel/betmind.git
+   ```
+
+2. **Instalar dependências**:
+   ```bash
+   npm install
+   ```
+
+3. **Configurar variáveis de ambiente**:
+   Crie um arquivo `.env` baseado no `.env.example` com suas credenciais do Supabase.
+
+4. **Executar em modo desenvolvimento**:
+   ```bash
+   npm run dev
+   ```
+
+---
+
+## 📄 Licença
+
+Este projeto é para uso educacional e demonstração de capacidades técnicas em desenvolvimento web e integração de IA.
+
+---
+**BetMind AI** - *Transformando dados em lucro.* 🎲📈
