@@ -14,6 +14,15 @@ O **BetMind AI** é uma plataforma avançada de análise e gestão de apostas es
   - 🚀 **Múltipla Agressiva**: Para retornos explosivos baseados em tendências de zebra ou viradas.
 - **Avaliação de Risco**: Todo bilhete de aposta é analisado pela IA, que classifica o risco entre Baixo, Médio e Alto.
 
+### 🤖 O Agente BetMind AI
+O coração da plataforma é um Agente Autônomo projetado para operar como um analista profissional:
+- **Monitoramento 24/7**: O agente varre milhares de eventos simultaneamente, identificando oportunidades que passam despercebidas pelo olho humano.
+- **Detecção de Padrões**: Analisa o histórico de confrontos, forma atual e pressão de jogo (Live Pressure) para prever o próximo evento (Gol, Escanteio ou Cartão).
+- **Modo de Aprendizado**: 
+  - **Base de Dados Histórica**: O agente utiliza uma vasta base de dados para comparar cenários atuais com situações passadas.
+  - **Ajuste de Confiança**: À medida que o jogo avança, o agente recalcula suas predições, aumentando o nível de confiança conforme a pressão estatística se consolida.
+  - **Refinamento Contínuo**: O sistema aprende com os resultados reais ("Green" ou "Red"), ajustando os pesos de suas variáveis para predições futuras cada vez mais precisas.
+
 ### ⚽ Experiência de Aposta "Zero Fricção"
 - **Seleção Direta**: Aposte diretamente na lista de jogos com um clique nas odds (1X2).
 - **Bet Slip Inteligente**: Painel lateral (Desktop) ou gaveta (Mobile) que calcula automaticamente odds totais e retorno potencial.
