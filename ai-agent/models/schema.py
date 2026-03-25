@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Integer, Float, Boolean, JSON, TIMESTAMP, ForeignKey
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from config import Base
 
 class Team(Base):
@@ -57,3 +58,33 @@ class AiInsight(Base):
     model_mode = Column(String, default="hybrid")
     created_at = Column(TIMESTAMP)
     updated_at = Column(TIMESTAMP)
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(String, primary_key=True)
+    username = Column(String, unique=True, nullable=False)
+    email = Column(String, unique=True)
+    avatar_url = Column(String)
+    reputation = Column(Integer, default=0)
+    badges = Column(JSON, default=[]) # Lista de medalhas
+    created_at = Column(TIMESTAMP, default=datetime.now)
+
+class Post(Base):
+    __tablename__ = "community_posts"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"))
+    content = Column(String, nullable=False)
+    match_id = Column(String, ForeignKey("matches_live.id"), nullable=True) # Link opcional para um jogo
+    bet_data = Column(JSON, nullable=True) # Detalhes da bet (mercado, odd, etc)
+    ai_validated = Column(Boolean, default=False)
+    ai_score = Column(Float, default=0.0)
+    created_at = Column(TIMESTAMP, default=datetime.now)
+    
+class Interaction(Base):
+    __tablename__ = "community_interactions"
+    id = Column(String, primary_key=True)
+    post_id = Column(String, ForeignKey("community_posts.id"))
+    user_id = Column(String, ForeignKey("users.id"))
+    type = Column(String) # 'like', 'comment', 'repost'
+    content = Column(String, nullable=True) # Para comentários
+    created_at = Column(TIMESTAMP, default=datetime.now)

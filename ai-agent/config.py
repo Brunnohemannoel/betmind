@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 import redis
 import json
@@ -17,14 +17,21 @@ if not DATABASE_URL:
 
 # Engine e Sessão do SQLAlchemy
 # Usamos pool_pre_ping para manter a conexão viva com a VPS
-try:
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args={"connect_timeout": 10})
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-except Exception as e:
-    print(f"CRITICAL: Could not connect to VPS database at {DATABASE_URL}: {e}")
-    # Fallback apenas para não quebrar o startup, mas deve alertar
-    engine = create_engine("sqlite:///./emergency.db")
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def create_resilient_engine(url):
+    try:
+        # Testa a conexão rápida antes de prosseguir
+        temp_engine = create_engine(url, connect_args={"connect_timeout": 3})
+        with temp_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        print(f"DEBUG: Connected to VPS database successfully.")
+        return temp_engine
+    except Exception as e:
+        print(f"CRITICAL: Could not connect to VPS database: {e}")
+        print("Falling back to local SQLite for stability.")
+        return create_engine("sqlite:///./local_test.db")
+
+engine = create_resilient_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 

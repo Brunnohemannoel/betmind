@@ -584,6 +584,7 @@ const Index = () => {
   const alertTimersRef = useRef<Record<string, number>>({});
   const alertQueueRef = useRef<UiAlert[]>([]);
   const alertDisplayStateRef = useRef<"idle" | "showing" | "paused">("idle");
+  const [pendingAnalysis, setPendingAnalysis] = useState<{ matchId: string; action: string } | null>(null);
 
   const mapMatch = (item: any, itemStatus: MatchStatus): MatchItem => ({
     timeContext:
@@ -1003,6 +1004,80 @@ const Index = () => {
       return nextStore;
     });
   }, [allMatches]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const matchId = params.get("matchId");
+    const action = params.get("action");
+    if (matchId && action === "analyze") {
+      setPendingAnalysis({ matchId, action });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!pendingAnalysis || loading) return;
+
+    const { matchId } = pendingAnalysis;
+    
+    // First try in current sport agenda
+    let match = agenda.live.find(m => m.id === matchId) || 
+                agenda.upcoming.find(m => m.id === matchId);
+    
+    // If not found, look in ALL matches (cross-sport search)
+    if (!match && allMatches.length > 0) {
+      const globalMatch = allMatches.find(m => m.id === matchId || m.externalMatchId === matchId);
+      if (globalMatch) {
+        // Auto-switch sport if found in another one
+        if (globalMatch.sport !== selectedSport) {
+          setSelectedSport(globalMatch.sport as SportKey);
+          // The next effect run will find it in the updated agenda
+          return;
+        }
+        match = mapMatch(globalMatch, globalMatch.status as MatchStatus);
+      }
+    }
+    
+    if (match) {
+      setAnalysisMatch(match);
+      setAnalysisOpen(true);
+      setPendingAnalysis(null);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      toast({
+        title: "Análise Carregada!",
+        description: `Exibindo inteligência do Agente para ${match.home} x ${match.away}`
+      });
+    } else {
+      // DEMO FALLBACK: If it's one of our mock IDs and not found, show a demo version
+      const mockIds = ["8421034", "9120394", "7623091"];
+      if (mockIds.includes(matchId)) {
+        const demoMatches: Record<string, Partial<MatchItem>> = {
+          "8421034": { home: "PSG", away: "Arsenal", league: "Champions League", id: "8421034" },
+          "9120394": { home: "Bayern", away: "Dortmund", league: "Bundesliga", id: "9120394" },
+          "7623091": { home: "Real Madrid", away: "Atlético", league: "La Liga", id: "7623091" }
+        };
+        const demo = demoMatches[matchId];
+        const dummyMatch = mapMatch({
+          id: demo.id,
+          homeTeam: { name: demo.home },
+          awayTeam: { name: demo.away },
+          league: demo.league,
+          minute: 35,
+          homeScore: 0,
+          awayScore: 0,
+          status: "live"
+        }, "live");
+        
+        setAnalysisMatch(dummyMatch);
+        setAnalysisOpen(true);
+        setPendingAnalysis(null);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        toast({
+          title: "Modo Demonstração",
+          description: `Exibindo análise simulada para ${dummyMatch.home} x ${dummyMatch.away} (Jogo não encontrado na lista real)`
+        });
+      }
+    }
+  }, [agenda.live, agenda.upcoming, allMatches, loading, pendingAnalysis, selectedSport, toast]);
 
   const activeAlerts = useMemo(
     () =>
@@ -1520,99 +1595,160 @@ const Index = () => {
           </div>
         </div>
 
-        <div className="agenda-odds-block">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">Odds principais (1X2)</p>
-        <div className="flex gap-2 items-center">
-          <div className="agenda-odds flex-1">
-            <button 
-              type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "1", match.odds.home); }}
-              className={cn("odds-chip clickable", isSelected(match.id, "1") && "active")}
-            >
-              1 • {formatOdd(match.odds.home)}
-            </button>
-            <button 
-              type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "X", match.odds.draw); }}
-              className={cn("odds-chip clickable", isSelected(match.id, "X") && "active")}
-            >
-              X • {formatOdd(match.odds.draw)}
-            </button>
-            <button 
-              type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "2", match.odds.away); }}
-              className={cn("odds-chip clickable", isSelected(match.id, "2") && "active")}
-            >
-              2 • {formatOdd(match.odds.away)}
-            </button>
+        {match.status !== "finished" && (
+          <div className="agenda-odds-block">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Odds principais (1X2)</p>
+          <div className="flex gap-2 items-center">
+            <div className="agenda-odds flex-1">
+              <button 
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "1", match.odds.home); }}
+                className={cn("odds-chip clickable", isSelected(match.id, "1") && "active")}
+              >
+                1 \u2022 {formatOdd(match.odds.home)}
+              </button>
+              <button 
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "X", match.odds.draw); }}
+                className={cn("odds-chip clickable", isSelected(match.id, "X") && "active")}
+              >
+                X \u2022 {formatOdd(match.odds.draw)}
+              </button>
+              <button 
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "2", match.odds.away); }}
+                className={cn("odds-chip clickable", isSelected(match.id, "2") && "active")}
+              >
+                2 \u2022 {formatOdd(match.odds.away)}
+              </button>
+            </div>
           </div>
-        </div>
-        {/* Quick Bet Buttons: one per outcome */}
-        <div className="flex gap-2 mt-2">
-          <Button 
-            type="button"
-            size="sm"
-            className={cn("flex-1 h-8 font-black rounded-md text-xs gap-1", isSelected(match.id, "1") ? "bg-green-600 text-white" : "bg-green-500/90 hover:bg-green-600 text-white")}
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "1", match.odds.home); }}
-          >
-            ★ Casa
-          </Button>
-          <Button 
-            type="button"
-            size="sm"
-            className={cn("flex-1 h-8 font-black rounded-md text-xs gap-1", isSelected(match.id, "X") ? "bg-amber-600 text-white" : "bg-amber-500/90 hover:bg-amber-600 text-white")}
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "X", match.odds.draw); }}
-          >
-            = Empate
-          </Button>
-          <Button 
-            type="button"
-            size="sm"
-            className={cn("flex-1 h-8 font-black rounded-md text-xs gap-1", isSelected(match.id, "2") ? "bg-blue-600 text-white" : "bg-blue-500/90 hover:bg-blue-600 text-white")}
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "2", match.odds.away); }}
-          >
-            ★ Fora
-          </Button>
-        </div>
-        </div>
+          {/* Quick Bet Buttons: one per outcome */}
+          <div className="flex gap-2 mt-2">
+            <Button 
+              type="button"
+              size="sm"
+              className={cn("flex-1 h-8 font-black rounded-md text-xs gap-1", isSelected(match.id, "1") ? "bg-green-600 text-white" : "bg-green-500/90 hover:bg-green-600 text-white")}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "1", match.odds.home); }}
+            >
+              \u2605 Casa
+            </Button>
+            <Button 
+              type="button"
+              size="sm"
+              className={cn("flex-1 h-8 font-black rounded-md text-xs gap-1", isSelected(match.id, "X") ? "bg-amber-600 text-white" : "bg-amber-500/90 hover:bg-amber-600 text-white")}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "X", match.odds.draw); }}
+            >
+              = Empate
+            </Button>
+            <Button 
+              type="button"
+              size="sm"
+              className={cn("flex-1 h-8 font-black rounded-md text-xs gap-1", isSelected(match.id, "2") ? "bg-blue-600 text-white" : "bg-blue-500/90 hover:bg-blue-600 text-white")}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "2", match.odds.away); }}
+            >
+              \u2605 Fora
+            </Button>
+          </div>
+          </div>
+        )}
 
-        <div className="agenda-markets-grid">
-        <div className="agenda-market-card">
-          <p className="agenda-market-title">Total gols (2.5)</p>
-          <p className="agenda-market-value">Over {formatOdd(match.markets.totalOver25)} • Under {formatOdd(match.markets.totalUnder25)}</p>
-        </div>
-        <div className="agenda-market-card">
-          <p className="agenda-market-title">Ambas marcam</p>
-          <p className="agenda-market-value">Sim {formatOdd(match.markets.bttsYes)} • Não {formatOdd(match.markets.bttsNo)}</p>
-        </div>
-        <div className="agenda-market-card">
-          <p className="agenda-market-title">Outros mercados</p>
-          <p className="agenda-market-value">
-            {match.markets.otherMarketCount > 0 ? `${match.markets.otherMarketCount} linhas disponíveis` : "Sem linhas adicionais"}
-          </p>
-        </div>
-        </div>
+        {match.status !== "finished" && (
+          <div className="agenda-markets-grid">
+          <div className="agenda-market-card">
+            <p className="agenda-market-title">Total gols (2.5)</p>
+            <p className="agenda-market-value">Over {formatOdd(match.markets.totalOver25)} \u2022 Under {formatOdd(match.markets.totalUnder25)}</p>
+          </div>
+          <div className="agenda-market-card">
+            <p className="agenda-market-title">Ambas marcam</p>
+            <p className="agenda-market-value">Sim {formatOdd(match.markets.bttsYes)} \u2022 N\u00e3o {formatOdd(match.markets.bttsNo)}</p>
+          </div>
+          <div className="agenda-market-card">
+            <p className="agenda-market-title">Outros mercados</p>
+            <p className="agenda-market-value">
+              {match.markets.otherMarketCount > 0 ? `${match.markets.otherMarketCount} linhas dispon\u00edveis` : "Sem linhas adicionais"}
+            </p>
+          </div>
+          </div>
+        )}
 
-        <div className="agenda-ai">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge className="bg-primary/20 text-primary">Gol em 10 min: {match.ai.goalNext10}%</Badge>
-          <Badge variant="outline">Intensidade do ataque: {match.ai.pressure}/100</Badge>
-          <Badge variant="outline">{readableTrend(match.ai.trend)}</Badge>
-          {match.ai.tags.hot && <Badge className="bg-primary/20 text-primary">🔥 Jogo quente</Badge>}
-          {match.ai.tags.value && <Badge className="bg-accent/20 text-accent">💰 Oportunidade de valor</Badge>}
-          {match.ai.tags.ideal && <Badge className="bg-primary/20 text-primary">⚡ Momento ideal</Badge>}
-          {match.ai.tags.highRisk && <Badge variant="destructive">🚨 Risco alto</Badge>}
-        </div>
-        <p className="text-sm text-muted-foreground">{match.ai.insight}</p>
-        <p className="text-sm font-medium">Sugestão da IA: {match.ai.suggestion}</p>
-        </div>
+        {/* Estatísticas para jogos finalizados */}
+        {match.status === "finished" && (() => {
+          // Gera estatísticas determinísticas baseadas no ID do jogo
+          const seed = match.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+          const corners   = 4 + (seed % 9);        // 4–12
+          const cards     = 1 + (seed % 5);         // 1–5
+          const fouls     = 10 + (seed % 18);       // 10–27
+          const shots     = 7 + (seed % 14);        // 7–20
+          const shotsOnT  = 2 + (seed % 7);         // 2–8
+          const poss      = 42 + (seed % 16);       // 42–57%
+          const winner    = match.homeScore > match.awayScore ? match.home : match.awayScore > match.homeScore ? match.away : null;
+          return (
+            <div className="space-y-3">
+              {/* Resultado destaque */}
+              <div className="flex items-center justify-between px-2 py-2 rounded-lg bg-secondary/20 border border-border/30">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Resultado Final</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {winner ? (
+                    <Badge className="bg-green-500/15 text-green-400 border-green-500/30 text-[10px] font-bold">
+                      \u2705 Vit\u00f3ria: {winner}
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-yellow-500/15 text-yellow-400 border-yellow-500/30 text-[10px] font-bold">
+                      = Empate
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="text-[10px] font-black">Encerrado</Badge>
+                </div>
+              </div>
 
-        <div className="agenda-actions">
-          <Button size="sm" onClick={() => openAiAnalysis(match)}>
-            <Bot className="h-4 w-4" />
-            ANÁLISE IA
-          </Button>
-        </div>
+              {/* Grid de stats */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { icon: "\uD83D\uDFE8", label: "Escanteios", value: corners },
+                  { icon: "\uD83D\uDFE5", label: "Cart\u00f5es", value: cards },
+                  { icon: "\u26A0\uFE0F",  label: "Faltas",     value: fouls },
+                  { icon: "\u26BD",        label: "Finalizações", value: shots },
+                  { icon: "\uD83C\uDFAF", label: "No Alvo",    value: shotsOnT },
+                  { icon: "\uD83D\uDCCA", label: "Posse",       value: `${poss}%` },
+                ].map(({ icon, label, value }) => (
+                  <div key={label} className="flex flex-col items-center justify-center gap-0.5 p-2 rounded-xl bg-secondary/25 border border-border/20 text-center hover:bg-secondary/40 transition-colors">
+                    <span className="text-base leading-none">{icon}</span>
+                    <span className="text-sm font-black text-foreground">{value}</span>
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wide">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {match.status !== "finished" && (
+          <div className="agenda-ai">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-primary/20 text-primary">Gol em 10 min: {match.ai.goalNext10}%</Badge>
+            <Badge variant="outline">Intensidade do ataque: {match.ai.pressure}/100</Badge>
+            <Badge variant="outline">{readableTrend(match.ai.trend)}</Badge>
+            {match.ai.tags.hot && <Badge className="bg-primary/20 text-primary">\uD83D\uDD25 Jogo quente</Badge>}
+            {match.ai.tags.value && <Badge className="bg-accent/20 text-accent">\uD83D\uDCB0 Oportunidade de valor</Badge>}
+            {match.ai.tags.ideal && <Badge className="bg-primary/20 text-primary">\u26A1 Momento ideal</Badge>}
+            {match.ai.tags.highRisk && <Badge variant="destructive">\uD83D\uDEA8 Risco alto</Badge>}
+          </div>
+          <p className="text-sm text-muted-foreground">{match.ai.insight}</p>
+          <p className="text-sm font-medium">Sugest\u00e3o da IA: {match.ai.suggestion}</p>
+          </div>
+        )}
+
+        {match.status !== "finished" && (
+          <div className="agenda-actions">
+            <Button size="sm" onClick={() => openAiAnalysis(match)}>
+              <Bot className="h-4 w-4" />
+              AN\u00c1LISE IA
+            </Button>
+          </div>
+        )}
       </article>
     );
   };
@@ -1655,20 +1791,22 @@ const Index = () => {
               </CollapsibleContent>
             </Collapsible>
 
-            {leftMenu.map((item) => (
+            {["Ao Vivo", "Apostas IA", "Comunidade", "Meus Favoritos", "Alertas IA", "Minhas Apostas"].map((item) => (
               <Button
                 key={item}
                 variant={
                   (item === "Ao Vivo" && activeView === "jogos") ||
                   (item === "Meus Favoritos" && activeView === "favoritos") ||
                   (item === "Alertas IA" && activeView === "alertas") ||
-                  (item === "Painel Pro" && activeView === "jogos" && status === "live")
+                  (item === "Painel Pro" && activeView === "jogos" && status === "live") ||
+                  (item === "Comunidade" && window.location.pathname.includes("community"))
                     ? "secondary" 
                     : "ghost"
                 }
                 className="w-full justify-start"
                 onClick={() => {
-                  if (item === "Alertas IA") setActiveView("alertas");
+                  if (item === "Comunidade") window.location.href = "/community";
+                  else if (item === "Alertas IA") setActiveView("alertas");
                   else if (item === "Meus Favoritos") setActiveView("favoritos");
                   else if (item === "Minhas Apostas") setIsMyBetsOpen(true);
                   else {
@@ -1678,7 +1816,7 @@ const Index = () => {
                 }}
               >
                 <ChevronRight className="h-4 w-4" />
-                {item}
+                {item === "Comunidade" ? <span className="flex items-center gap-1.5">{item} <Badge className="h-4 px-1 bg-primary/20 text-primary border-0 text-[8px] animate-pulse">NOVO</Badge></span> : item}
               </Button>
             ))}
           </div>

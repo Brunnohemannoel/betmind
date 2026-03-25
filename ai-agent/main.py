@@ -15,7 +15,8 @@ from config import redis_client, get_db, SessionLocal
 from services.features import FeatureEngineer
 from services.analyzer import Analyzer
 from models.predictor import Predictor
-from models.schema import Match, MatchesHistory, AiInsight
+from models.schema import Match, MatchesHistory, AiInsight, User, Post, Interaction
+from config import engine, Base
 
 class AnalyzeRequest(BaseModel):
     match_id: str
@@ -34,6 +35,9 @@ class AnalyzeRequest(BaseModel):
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="BetMind AI Agent")
+
+# Cria tabelas se não existirem
+Base.metadata.create_all(bind=engine)
 
 # Configuração de CORS para permitir chamadas do frontend
 app.add_middleware(
@@ -369,6 +373,205 @@ def analyze_match(req: AnalyzeRequest, db=Depends(get_db)):
 @app.get("/health")
 def health():
     return {"status": "ok", "agent": "BetMind AI", "version": "1.2.0"}
+
+# --- ENDPOINTS COMUNIDADE ---
+
+class PostCreate(BaseModel):
+    user_id: str
+    content: str
+    match_id: Optional[str] = None
+    bet_data: Optional[dict] = None
+
+class InteractionCreate(BaseModel):
+    post_id: str
+    user_id: str
+    type: str # like, comment, repost
+    content: Optional[str] = None
+
+COMMUNITY_MOCK_FEED = [
+    {
+        "id": "ai-post-1",
+        "user": {"username": "BetMind_IA", "reputation": 9999, "badges": ["🤖 IA OFICIAL"]},
+        "content": "🤖 PSG dominando as ações. Pressão ofensiva altíssima nos últimos 10 minutos. O gol está maduro.",
+        "ai_validated": True,
+        "ai_score": 0.97,
+        "ai_recommendation": "ENTRAR AGORA",
+        "bet_data": {"market": "Over 0.5 HT (Gols no 1º Tempo)", "odd": 1.85},
+        "match_info": {
+            "match_id": "8421034",
+            "home_team": "PSG",
+            "away_team": "Arsenal",
+            "home_score": 0,
+            "away_score": 0,
+            "minute": 34,
+            "league": "Champions League"
+        },
+        "urgency": {
+            "time_left": "11:00",
+            "intensity": 92,
+            "label": "JOGO EXPLODINDO 🔥"
+        },
+        "social_proof": {
+            "bettors_count": 124,
+            "community_percentage": 87,
+            "trending": True
+        },
+        "created_at": datetime.now().isoformat(),
+        "likes": 215,
+        "comments": 54,
+    },
+    {
+        "id": "ai-post-2",
+        "user": {"username": "GreenHunter_23", "reputation": 342, "badges": ["PRO", "🔥 Streak 7"]},
+        "content": "🔥 Bayern massacrando no volume. 87% de posse no terço final. Aposta de valor no mercado de gols.",
+        "ai_validated": True,
+        "ai_score": 0.94,
+        "ai_recommendation": "ENTRAR AGORA",
+        "bet_data": {"market": "Over 1.5 Gols", "odd": 1.62},
+        "match_info": {
+            "match_id": "9120394",
+            "home_team": "Bayern",
+            "away_team": "Dortmund",
+            "home_score": 1,
+            "away_score": 0,
+            "minute": 62,
+            "league": "Bundesliga"
+        },
+        "urgency": {
+            "time_left": "28:00",
+            "intensity": 87,
+            "label": "MISSÃO GREEN ✅"
+        },
+        "social_proof": {
+            "bettors_count": 85,
+            "community_percentage": 74
+        },
+        "created_at": datetime.now().isoformat(),
+        "likes": 48,
+        "comments": 12,
+    },
+    {
+        "id": "ai-post-3",
+        "user": {"username": "Estrategista_VIP", "reputation": 890, "badges": ["ELITE", "⭐ Top 10"]},
+        "content": "📊 Madrid controlando o ritmo. Jogo muito truncado no meio campo. Valor no Under.",
+        "ai_validated": True,
+        "ai_score": 0.88,
+        "ai_recommendation": "AGUARDAR",
+        "bet_data": {"market": "Under 2.5 Gols", "odd": 1.95},
+        "match_info": {
+            "match_id": "7623091",
+            "home_team": "Real Madrid",
+            "away_team": "Atlético",
+            "home_score": 0,
+            "away_score": 0,
+            "minute": 20,
+            "league": "La Liga"
+        },
+        "urgency": {
+            "intensity": 45,
+            "label": "RITMO MODERADO 📊"
+        },
+        "social_proof": {
+            "bettors_count": 42,
+            "community_percentage": 61
+        },
+        "created_at": datetime.now().isoformat(),
+        "likes": 103,
+        "comments": 31,
+        "comments_list": []
+    },
+]
+
+@app.get("/community/feed")
+def get_feed(db = Depends(get_db)):
+    try:
+        db_posts = db.query(Post).order_by(Post.created_at.desc()).limit(50).all()
+        result = []
+        
+        # Combine real posts and mocks to fetch interactions for all
+        all_posts_data = []
+        for p in db_posts:
+            all_posts_data.append({
+                "id": p.id,
+                "user": {"username": p.user_id, "reputation": 100, "badges": ["PRO"]},
+                "content": p.content,
+                "ai_validated": p.ai_validated,
+                "ai_score": p.ai_score,
+                "bet_data": p.bet_data,
+                "match_info": {"match_id": p.match_id, "home_team": "Jogo", "away_team": "Referente", "league": "Liga"} if p.match_id else None,
+                "created_at": p.created_at.isoformat() if p.created_at else datetime.now().isoformat(),
+            })
+        
+        # Add mocks to the list of IDs to check interactions for (use copy to avoid mutation)
+        for m in COMMUNITY_MOCK_FEED:
+            all_posts_data.append(m.copy())
+        
+        final_result = []
+        for post_data in all_posts_data:
+            pid = post_data["id"]
+            inters = db.query(Interaction).filter(Interaction.post_id == pid).order_by(Interaction.created_at.asc()).all()
+            
+            # Use original counts from mock if they exist, but add DB interactions on top
+            db_likes = len([i for i in inters if i.type == 'like'])
+            db_comments = [{"username": i.user_id, "content": i.content} for i in inters if i.type == 'comment']
+            
+            orig_likes = post_data.get("likes")
+            if not isinstance(orig_likes, int): orig_likes = 0
+            post_data["likes"] = orig_likes + db_likes
+            
+            orig_comments_count = post_data.get("comments")
+            if not isinstance(orig_comments_count, int): orig_comments_count = 0
+            post_data["comments"] = orig_comments_count + len(db_comments)
+            
+            # Initialize or extend comments_list
+            if "comments_list" not in post_data or post_data["comments_list"] is None:
+                post_data["comments_list"] = []
+            
+            # Add DB comments
+            post_data["comments_list"].extend(db_comments)
+            
+            final_result.append(post_data)
+            
+        return final_result
+    except Exception as e:
+        print(f"Community feed DB error (using mock): {e}")
+    return COMMUNITY_MOCK_FEED
+
+@app.post("/community/post")
+def create_post(req: PostCreate, db = Depends(get_db)):
+    # Validação automática IA (Mock)
+    is_valid = len(req.content) > 10
+    score = 0.85 if "pressão" in req.content.lower() else 0.5
+    
+    new_post = Post(
+        id=str(uuid.uuid4()),
+        user_id=req.user_id,
+        content=req.content,
+        match_id=req.match_id,
+        bet_data=req.bet_data,
+        ai_validated=is_valid,
+        ai_score=score,
+        created_at=datetime.now()
+    )
+    db.add(new_post)
+    db.commit()
+    return {"status": "success", "post_id": new_post.id}
+
+@app.post("/community/interact")
+def interact(req: InteractionCreate, db = Depends(get_db)):
+    new_inter = Interaction(
+        id=str(uuid.uuid4()),
+        post_id=req.post_id,
+        user_id=req.user_id,
+        type=req.type,
+        content=req.content,
+        created_at=datetime.now()
+    )
+    db.add(new_inter)
+    db.commit()
+    return {"status": "success"}
+
+# ----------------------------
 
 
 if __name__ == "__main__":
