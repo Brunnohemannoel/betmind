@@ -126,6 +126,11 @@ type MatchItem = {
     alerts: string[];
     insight: string;
     suggestion: string;
+    guiadaInsights: {
+      safe: { market: string; odd: number; confidence: number; justification: string };
+      balanced: { market: string; odd: number; confidence: number; justification: string };
+      risky: { market: string; odd: number; confidence: number; justification: string };
+    };
     tags: {
       hot: boolean;
       value: boolean;
@@ -134,6 +139,7 @@ type MatchItem = {
       comeback: boolean;
     };
   };
+  intensityScore: number;
   timeContext: TimeContext;
 };
 
@@ -156,7 +162,7 @@ const sportsMenu: { key: SportKey; label: string }[] = [
 
 const leftMenu = ["Meus Favoritos", "Alertas IA", "Minhas Apostas"];
 
-const defaultLogo = "/placeholder.svg";
+const defaultLogo = `${import.meta.env.BASE_URL}placeholder.svg`;
 
 const statusLabel: Record<MatchStatus, string> = {
   live: "Ao vivo",
@@ -445,6 +451,7 @@ const Index = () => {
   const [depositStep, setDepositStep] = useState<"amount" | "pix">("amount");
   const [depositAmount, setDepositAmount] = useState<string>("");
   const [isBetting, setIsBetting] = useState(false);
+  const [guiadaProfile, setGuiadaProfile] = useState<"safe" | "balanced" | "risky">("balanced");
 
   const toggleSelection = useCallback((match: MatchItem, type: "1" | "X" | "2", odd: number | null) => {
     const safeOdd = (odd !== null && odd > 1) ? odd : 1.50; // Fallback de proteção para teste sem odds da API
@@ -703,7 +710,28 @@ const Index = () => {
         highRisk: Boolean(item?.ai?.tags?.highRisk),
         comeback: Boolean(item?.ai?.tags?.comeback),
       },
+      guiadaInsights: {
+        safe: { 
+          market: item?.ai?.guiada?.safe?.market ?? (item?.homeScore + item?.awayScore > 0 ? "Under 3.5 Gols" : "Over 0.5 Gols"),
+          odd: Number(item?.ai?.guiada?.safe?.odd ?? 1.35),
+          confidence: Number(item?.ai?.guiada?.safe?.confidence ?? 88),
+          justification: item?.ai?.guiada?.safe?.justification ?? "Padrão estatístico sugere alta probabilidade."
+        },
+        balanced: { 
+          market: item?.ai?.guiada?.balanced?.market ?? "Vencedor: Casa",
+          odd: Number(item?.ai?.guiada?.balanced?.odd ?? 1.85),
+          confidence: Number(item?.ai?.guiada?.balanced?.confidence ?? 72),
+          justification: item?.ai?.guiada?.balanced?.justification ?? "Pressão ofensiva constante nos últimos 15 min."
+        },
+        risky: { 
+          market: item?.ai?.guiada?.risky?.market ?? "Próximo Gol: Visitante",
+          odd: Number(item?.ai?.guiada?.risky?.odd ?? 3.40),
+          confidence: Number(item?.ai?.guiada?.risky?.confidence ?? 45),
+          justification: item?.ai?.guiada?.risky?.justification ?? "Tendência de zebra detectada por volume de ataques."
+        }
+      }
     },
+    intensityScore: Number(item?.intensity_score ?? Math.min(100, Math.max(0, (Number(item?.ai?.pressure ?? 0) * 0.7 + Number(item?.ai?.momentum ?? 0) * 0.3)))),
   });
 
   const fetchLiveData = useCallback(
@@ -1212,6 +1240,23 @@ const Index = () => {
               <p className="text-xs uppercase tracking-wide text-muted-foreground">{match.league}</p>
               {isFavorite && <Badge className="bg-yellow-400/20 text-yellow-400 border-yellow-400/30 text-[10px] h-4">⭐ Favorito</Badge>}
             </div>
+            {/* Urgency Bar for Late Games */}
+            {match.status === "live" && timeView.minute >= 75 && (
+              <div className="mb-2 p-2 bg-red-600/10 border border-red-500/20 rounded-md animate-in fade-in slide-in-from-top-1 duration-500 flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-red-500 flex items-center gap-1 uppercase tracking-tighter">
+                    <AlertTriangle className="h-3 w-3 animate-pulse" /> 🚨 Última chance de apostar
+                  </span>
+                  <span className="text-[10px] font-bold text-red-500/80">90' encerra</span>
+                </div>
+                <div className="h-1 w-full bg-red-500/10 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-red-500 animate-pulse" 
+                    style={{ width: `${Math.min(100, Math.max(0, ((timeView.minute - 75) / 15) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            )}
             {match.status === "live" && (
               <div className="time-context-block">
                 <div className={cn("time-pill", `time-pill-${timeView.urgencyLevel}`, timeView.isCriticalWindow && "critical-pulse")}>
@@ -1231,6 +1276,38 @@ const Index = () => {
                 </div>
               </div>
             )}
+            
+            {/* Termômetro do Jogo (Intensity Bar) */}
+            {match.status === "live" && (
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <Flame className={cn("h-3 w-3", 
+                      match.intensityScore > 70 ? "text-red-500 animate-pulse" : 
+                      match.intensityScore > 40 ? "text-yellow-500" : "text-blue-500"
+                    )} />
+                    Intensidade: {match.intensityScore}%
+                  </span>
+                  <span className={cn(
+                    match.intensityScore > 70 ? "text-red-500" : 
+                    match.intensityScore > 40 ? "text-yellow-500" : "text-blue-500"
+                  )}>
+                    {match.intensityScore > 70 ? "🔥 Jogo Quente" : 
+                     match.intensityScore > 40 ? "⚡ Pressão Média" : "❄️ Ritmo Calmo"}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-secondary/30 rounded-full overflow-hidden border border-white/5">
+                  <div 
+                    className={cn("h-full transition-all duration-1000 ease-out", 
+                      match.intensityScore > 70 ? "bg-gradient-to-r from-orange-600 to-red-600 shadow-[0_0_8px_rgba(239,68,68,0.4)]" : 
+                      match.intensityScore > 40 ? "bg-gradient-to-r from-blue-500 to-yellow-500" : "bg-blue-600"
+                    )}
+                    style={{ width: `${match.intensityScore}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            
             {match.status === "upcoming" && <span className="text-xs text-muted-foreground">Início: {formatKickoff(match.kickoffAt)}</span>}
           </div>
           <div className="flex flex-wrap items-center gap-2 pr-16">
@@ -1386,7 +1463,7 @@ const Index = () => {
       <section className="sportsbook-shell">
         <aside className="sportsbook-sidebar md:sticky md:top-4 md:h-[calc(100vh-2rem)] md:overflow-y-auto">
           <div className="space-y-4">
-            <img src="/logo.png" alt="Devos da Sorte" className="w-[220px] mx-auto h-auto object-contain" />
+            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Devos da Sorte" className="w-[220px] mx-auto h-auto object-contain" />
             <div className="space-y-1.5 text-center">
               <Badge className="w-fit bg-primary/20 text-primary mx-auto">BetMind AI</Badge>
               <h1 className="text-2xl font-semibold tracking-tight">Painel Trader Pro</h1>
@@ -1447,6 +1524,72 @@ const Index = () => {
             ))}
           </div>
 
+          <div className="space-y-4 pt-2">
+            {/* Aposta Guiada (IA) Section */}
+            <div className="space-y-3 px-1">
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary/80">
+                <Sparkles className="h-3.5 w-3.5" />
+                Aposta Guiada (IA)
+              </div>
+              
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-secondary/20 rounded-lg border border-white/5">
+                {[
+                  { id: "safe", label: "Seguro", icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10" },
+                  { id: "balanced", label: "Equilib.", icon: Zap, color: "text-yellow-500", bg: "bg-yellow-500/10" },
+                  { id: "risky", label: "Arriscado", icon: Flame, color: "text-red-500", bg: "bg-red-500/10" }
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setGuiadaProfile(p.id as any)}
+                    className={cn(
+                      "flex flex-col items-center gap-1 py-2 rounded-md transition-all border border-transparent",
+                      guiadaProfile === p.id 
+                        ? `${p.bg} border-${p.color.split("-")[1]}-500/30 shadow-sm scale-[1.02]` 
+                        : "hover:bg-white/5 opacity-60 hover:opacity-100"
+                    )}
+                  >
+                    <p.icon className={cn("h-4 w-4", guiadaProfile === p.id ? p.color : "text-muted-foreground")} />
+                    <span className="text-[9px] font-bold uppercase">{p.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Dynamic Suggestion Card */}
+              {agenda.live.length > 0 && (
+                <Card className="bg-gradient-to-br from-secondary/40 to-background border-primary/20 shadow-lg overflow-hidden group">
+                  <CardContent className="p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Badge className={cn("text-[9px] h-4 px-1.5 border-0", 
+                        guiadaProfile === "safe" ? "bg-green-500/20 text-green-500" :
+                        guiadaProfile === "balanced" ? "bg-yellow-500/20 text-yellow-500" : "bg-red-500/20 text-red-500"
+                      )}>
+                        {guiadaProfile === "safe" ? "BAIXO RISCO" : guiadaProfile === "balanced" ? "EQUILIBRADO" : "ALTO RISCO"}
+                      </Badge>
+                      <span className="text-[10px] font-bold text-primary">{agenda.live[0].ai.guiadaInsights[guiadaProfile].confidence}% Confiança</span>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <p className="text-[10px] uppercase text-muted-foreground font-bold truncate">{agenda.live[0].home} x {agenda.live[0].away}</p>
+                      <p className="text-xs font-black text-foreground">{agenda.live[0].ai.guiadaInsights[guiadaProfile].market}</p>
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground leading-tight italic">
+                      "{agenda.live[0].ai.guiadaInsights[guiadaProfile].justification}"
+                    </p>
+
+                    <Button 
+                      size="sm" 
+                      className="w-full h-8 text-[10px] font-black uppercase btn-glow"
+                      onClick={() => toggleSelection(agenda.live[0], "1", agenda.live[0].ai.guiadaInsights[guiadaProfile].odd)}
+                    >
+                      Apostar • @{agenda.live[0].ai.guiadaInsights[guiadaProfile].odd.toFixed(2)}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-4">
             {/* User Profile Block */}
             <div className="flex items-center gap-3 p-3 bg-card/60 rounded-xl border border-border/50">
@@ -1484,6 +1627,63 @@ const Index = () => {
         </aside>
 
         <section className="sportsbook-main">
+          {/* Game Stories section */}
+          <div className="mb-6 px-1">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
+                <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                Destaques BetMind
+              </h3>
+              <span className="text-[10px] text-primary/60 font-medium">Arraste para ver mais</span>
+            </div>
+            
+            <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar -mx-1 px-1 snap-x scroll-smooth">
+              {/* Special Story: IA Recommendation */}
+              <div className="flex-none scroll-snap-align-start group cursor-pointer" onClick={() => setActiveView("alertas")}>
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-full p-[3px] bg-gradient-to-tr from-primary via-accent to-purple-500 animate-spin-slow">
+                    <div className="w-full h-full rounded-full bg-background border-2 border-background overflow-hidden flex items-center justify-center">
+                      <Bot className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
+                    </div>
+                  </div>
+                  <Badge className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-primary text-[8px] h-4 border-0">TOP IA</Badge>
+                </div>
+                <p className="text-[10px] font-bold text-center mt-2 group-hover:text-primary">Insights</p>
+              </div>
+
+              {/* Match Stories */}
+              {agenda.live.concat(agenda.upcoming).slice(0, 8).map((m) => (
+                <div 
+                  key={`story-${m.id}`} 
+                  className="flex-none scroll-snap-align-start group cursor-pointer" 
+                  onClick={() => openAiAnalysis(m)}
+                >
+                  <div className="relative">
+                    <div className={cn(
+                      "w-16 h-16 rounded-full p-[3px] transition-all group-hover:scale-105",
+                      m.status === "live" ? "bg-gradient-to-tr from-green-500 to-emerald-400" : "bg-gradient-to-tr from-blue-500 to-indigo-400"
+                    )}>
+                      <div className="w-full h-full rounded-full bg-background border-2 border-background overflow-hidden flex items-center justify-center p-2 relative">
+                        <img 
+                          src={m.homeLogo} 
+                          className="w-full h-full object-contain filter grayscale-[0.2] transition-all group-hover:grayscale-0" 
+                          alt={m.home} 
+                        />
+                        {m.status === "live" && (
+                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                            <span className="text-[9px] font-black text-white drop-shadow-md">{m.homeScore}-{m.awayScore}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {m.status === "live" && <Badge className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-green-500 text-[8px] h-4 border-0 animate-pulse">LIVE</Badge>}
+                  </div>
+                  <p className="text-[10px] font-bold text-center mt-2 truncate w-16">{m.home.split(' ')[0]}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="sportsbook-sticky-header">
             <header className="sportsbook-topbar">
               <div className="relative flex-1">

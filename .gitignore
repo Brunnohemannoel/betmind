@@ -13,7 +13,9 @@ dist-ssr
 *.local
 .env
 data.zip
+betmind-dist.zip
 public/events/
+
 
 # Editor directories and files
 .vscode/*

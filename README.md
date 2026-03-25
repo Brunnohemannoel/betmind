@@ -74,6 +74,26 @@ O coração da plataforma é um Agente Autônomo projetado para operar como um a
 
 ---
 
+## 🚢 Build e Implantação (Hospedagem)
+
+Para gerar uma versão de produção otimizada para hospedagem em subdiretórios (ex: `/esportesorte/`):
+
+1.  **Executar o script de automação**:
+    ```bash
+    node scripts/build_and_zip.cjs
+    ```
+    Este script irá:
+    - Compilar o projeto usando `vite build` com o caminho base correto.
+    - Ajustar as rotas para o diretório de destino.
+    - Gerar o arquivo `betmind-dist.zip` na raiz do projeto.
+
+2.  **Enviar para o Servidor**:
+    - Faça o upload do arquivo `betmind-dist.zip`.
+    - Extraia o conteúdo diretamente na pasta de destino (ex: `/public_html/esportesorte/`).
+    - O arquivo `.htaccess` incluso já está configurado para suportar o roteamento SPA (Single Page Application) na subpasta.
+
+---
+
 ## 📄 Licença
 
 Este projeto é para uso educacional e demonstração de capacidades técnicas em desenvolvimento web e integração de IA.
