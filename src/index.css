@@ -987,4 +987,24 @@ All colors MUST be HSL.
   .match-progress-bar {
     width: 100%;
   }
+
+  @keyframes voice-pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  }
+
+  @keyframes ai-glow-pulse {
+    0%, 100% { opacity: 0.5; filter: blur(8px); }
+    50% { opacity: 1; filter: blur(14px); }
+  }
+
+  .animate-voice-pulse {
+    animation: voice-pulse 2s infinite;
+  }
+
+  .ai-glow-bg {
+    background: radial-gradient(circle at center, hsl(var(--primary) / 0.15), transparent 70%);
+    animation: ai-glow-pulse 3s infinite ease-in-out;
+  }
 }

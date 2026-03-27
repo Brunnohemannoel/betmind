@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -76,6 +77,7 @@ type MatchItem = {
   statusDetail: string;
   minute: number;
   status: MatchStatus;
+  sport?: string;
   hot: boolean;
   odds: { home: number | null; draw: number | null; away: number | null };
   markets: {
@@ -117,6 +119,7 @@ type MatchItem = {
       goal: number;
       corner: number;
       card: number;
+      redCardChance?: number;
     };
     charts: {
       pressureTimeline: { label: string; home: number; away: number }[];
@@ -431,6 +434,7 @@ const Index = () => {
   const [betAmount, setBetAmount] = useState<string>("100");
   const [isBetSlipOpen, setIsBetSlipOpen] = useState(false);
   const [isMyBetsOpen, setIsMyBetsOpen] = useState(false);
+  const navigate = useNavigate();
   
   const [myBets, setMyBets] = useState<SavedBet[]>(() => {
     const saved = localStorage.getItem("betmind_mybets");
@@ -661,9 +665,9 @@ const Index = () => {
       momentum: Number(item?.ai?.momentum ?? 0),
       dominance: Number(item?.ai?.dominance ?? 0),
       trend: item?.ai?.trend ?? "estavel",
-      winHome: Number(item?.ai?.winHome ?? 33),
-      winDraw: Number(item?.ai?.winDraw ?? 34),
-      winAway: Number(item?.ai?.winAway ?? 33),
+      winHome: Number(item?.ai?.winHome ?? 0),
+      winDraw: Number(item?.ai?.winDraw ?? 0),
+      winAway: Number(item?.ai?.winAway ?? 0),
       goalNext10: Number(item?.ai?.goalNext10 ?? 0),
       over05: Number(item?.ai?.over05 ?? 0),
       over15: Number(item?.ai?.over15 ?? 0),
@@ -855,6 +859,52 @@ const Index = () => {
   }, [agenda.live.length + agenda.upcoming.length]);
 
   const allMatches = useMemo(() => [...agenda.live, ...agenda.upcoming, ...agenda.finished], [agenda]);
+
+  // Listener para o VoiceAssistant / Chat AI
+  useEffect(() => {
+    const handleOpenMatch = (e: any) => {
+      const { matchId, homeTeam, awayTeam } = e.detail;
+      const idStr = String(matchId);
+      console.log("Abrindo análise para matchId:", idStr, "Teams:", homeTeam, "vs", awayTeam);
+      
+      // 1. Busca por ID exato ou ID externo (Check para strings ou números transformados)
+      let match = allMatches.find(m => 
+        String(m.id) === idStr || 
+        String(m.externalMatchId) === idStr ||
+        (m.id && idStr.includes(String(m.id))) ||
+        (idStr && String(m.id).includes(idStr))
+      );
+
+      // 2. Se não encontrou por ID, tenta por Nome dos Times (Fuzzy Match)
+      if (!match && homeTeam) {
+        const hNorm = normalizeText(homeTeam);
+        const aNorm = awayTeam ? normalizeText(awayTeam) : "";
+        
+        match = allMatches.find(m => {
+          const mH = normalizeText(m.home);
+          const mA = normalizeText(m.away);
+          // Verifica se o nome do time casa contém o buscado ou vice-versa
+          const homeHit = mH.includes(hNorm) || hNorm.includes(mH);
+          const awayHit = aNorm ? (mA.includes(aNorm) || aNorm.includes(mA)) : true;
+          return homeHit && awayHit;
+        });
+      }
+
+      if (match) {
+        setAnalysisMatch(match);
+        setAnalysisOpen(true);
+      } else {
+        toast({
+          title: "Partida não encontrada",
+          description: `Não encontramos "${homeTeam || idStr}" na lista atual de jogos vivos.`,
+          variant: "destructive"
+        });
+      }
+    };
+
+    window.addEventListener("open-match-analysis", handleOpenMatch);
+    return () => window.removeEventListener("open-match-analysis", handleOpenMatch);
+  }, [allMatches, toast]);
 
   const suggestedMultiples = useMemo(() => {
     const live = allMatches.filter(m => m.status === "live" && m.odds.home !== null && m.odds.home! > 1);
@@ -1306,9 +1356,8 @@ const Index = () => {
         corners: null,
       };
 
-      const AI_AGENT_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-        ? "http://127.0.0.1:8000/analyze"
-        : "http://191.252.100.73:8000/analyze";
+      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      const AI_AGENT_URL = isLocal ? "http://127.0.0.1:8000/analyze" : "https://api.torrenettelecom.com.br/ai-agent/analyze";
 
       const res = await fetch(AI_AGENT_URL, {
         method: "POST",
@@ -1328,6 +1377,7 @@ const Index = () => {
         goal_chance: number;
         corner_chance: number;
         card_chance: number;
+        red_card_chance: number;
         best_bet: {
           market: string;
           confidence: number;
@@ -1361,6 +1411,7 @@ const Index = () => {
             goal: py.goal_chance,
             corner: py.corner_chance,
             card: py.card_chance,
+            redCardChance: py.red_card_chance || 0,
           },
           statusSignals: {
             ...match.ai.statusSignals,
@@ -1605,21 +1656,21 @@ const Index = () => {
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "1", match.odds.home); }}
                 className={cn("odds-chip clickable", isSelected(match.id, "1") && "active")}
               >
-                1 \u2022 {formatOdd(match.odds.home)}
+                1 • {formatOdd(match.odds.home)}
               </button>
               <button 
                 type="button"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "X", match.odds.draw); }}
                 className={cn("odds-chip clickable", isSelected(match.id, "X") && "active")}
               >
-                X \u2022 {formatOdd(match.odds.draw)}
+                X • {formatOdd(match.odds.draw)}
               </button>
               <button 
                 type="button"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "2", match.odds.away); }}
                 className={cn("odds-chip clickable", isSelected(match.id, "2") && "active")}
               >
-                2 \u2022 {formatOdd(match.odds.away)}
+                2 • {formatOdd(match.odds.away)}
               </button>
             </div>
           </div>
@@ -1631,7 +1682,7 @@ const Index = () => {
               className={cn("flex-1 h-8 font-black rounded-md text-xs gap-1", isSelected(match.id, "1") ? "bg-green-600 text-white" : "bg-green-500/90 hover:bg-green-600 text-white")}
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "1", match.odds.home); }}
             >
-              \u2605 Casa
+              <Star className="h-3 w-3" /> Casa
             </Button>
             <Button 
               type="button"
@@ -1647,7 +1698,7 @@ const Index = () => {
               className={cn("flex-1 h-8 font-black rounded-md text-xs gap-1", isSelected(match.id, "2") ? "bg-blue-600 text-white" : "bg-blue-500/90 hover:bg-blue-600 text-white")}
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelection(match, "2", match.odds.away); }}
             >
-              \u2605 Fora
+              <Star className="h-3 w-3" /> Fora
             </Button>
           </div>
           </div>
@@ -1657,16 +1708,16 @@ const Index = () => {
           <div className="agenda-markets-grid">
           <div className="agenda-market-card">
             <p className="agenda-market-title">Total gols (2.5)</p>
-            <p className="agenda-market-value">Over {formatOdd(match.markets.totalOver25)} \u2022 Under {formatOdd(match.markets.totalUnder25)}</p>
+            <p className="agenda-market-value">Over {formatOdd(match.markets.totalOver25)} • Under {formatOdd(match.markets.totalUnder25)}</p>
           </div>
           <div className="agenda-market-card">
             <p className="agenda-market-title">Ambas marcam</p>
-            <p className="agenda-market-value">Sim {formatOdd(match.markets.bttsYes)} \u2022 N\u00e3o {formatOdd(match.markets.bttsNo)}</p>
+            <p className="agenda-market-value">Sim {formatOdd(match.markets.bttsYes)} • Não {formatOdd(match.markets.bttsNo)}</p>
           </div>
           <div className="agenda-market-card">
             <p className="agenda-market-title">Outros mercados</p>
             <p className="agenda-market-value">
-              {match.markets.otherMarketCount > 0 ? `${match.markets.otherMarketCount} linhas dispon\u00edveis` : "Sem linhas adicionais"}
+              {match.markets.otherMarketCount > 0 ? `${match.markets.otherMarketCount} linhas disponíveis` : "Sem linhas adicionais"}
             </p>
           </div>
           </div>
@@ -1731,13 +1782,13 @@ const Index = () => {
             <Badge className="bg-primary/20 text-primary">Gol em 10 min: {match.ai.goalNext10}%</Badge>
             <Badge variant="outline">Intensidade do ataque: {match.ai.pressure}/100</Badge>
             <Badge variant="outline">{readableTrend(match.ai.trend)}</Badge>
-            {match.ai.tags.hot && <Badge className="bg-primary/20 text-primary">\uD83D\uDD25 Jogo quente</Badge>}
-            {match.ai.tags.value && <Badge className="bg-accent/20 text-accent">\uD83D\uDCB0 Oportunidade de valor</Badge>}
-            {match.ai.tags.ideal && <Badge className="bg-primary/20 text-primary">\u26A1 Momento ideal</Badge>}
-            {match.ai.tags.highRisk && <Badge variant="destructive">\uD83D\uDEA8 Risco alto</Badge>}
+            {match.ai.tags.hot && <Badge className="bg-primary/20 text-primary"><Flame className="h-3 w-3 mr-1" /> Jogo quente</Badge>}
+            {match.ai.tags.value && <Badge className="bg-accent/20 text-accent"><CircleDollarSign className="h-3 w-3 mr-1" /> Oportunidade de valor</Badge>}
+            {match.ai.tags.ideal && <Badge className="bg-primary/20 text-primary"><Zap className="h-3 w-3 mr-1" /> Momento ideal</Badge>}
+            {match.ai.tags.highRisk && <Badge variant="destructive"><ShieldAlert className="h-3 w-3 mr-1" /> Risco alto</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">{match.ai.insight}</p>
-          <p className="text-sm font-medium">Sugest\u00e3o da IA: {match.ai.suggestion}</p>
+          <p className="text-sm font-medium">Sugestão da IA: {match.ai.suggestion}</p>
           </div>
         )}
 
@@ -1745,7 +1796,7 @@ const Index = () => {
           <div className="agenda-actions">
             <Button size="sm" onClick={() => openAiAnalysis(match)}>
               <Bot className="h-4 w-4" />
-              AN\u00c1LISE IA
+              ANÁLISE IA
             </Button>
           </div>
         )}
@@ -1791,7 +1842,7 @@ const Index = () => {
               </CollapsibleContent>
             </Collapsible>
 
-            {["Ao Vivo", "Apostas IA", "Comunidade", "Meus Favoritos", "Alertas IA", "Minhas Apostas"].map((item) => (
+            {["Comunidade", "Meus Favoritos", "Alertas IA", "Minhas Apostas"].map((item) => (
               <Button
                 key={item}
                 variant={
@@ -1805,7 +1856,7 @@ const Index = () => {
                 }
                 className="w-full justify-start"
                 onClick={() => {
-                  if (item === "Comunidade") window.location.href = "/community";
+                  if (item === "Comunidade") navigate("/community");
                   else if (item === "Alertas IA") setActiveView("alertas");
                   else if (item === "Meus Favoritos") setActiveView("favoritos");
                   else if (item === "Minhas Apostas") setIsMyBetsOpen(true);

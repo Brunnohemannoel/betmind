@@ -25,23 +25,6 @@ CREATE TABLE IF NOT EXISTS public.bets (
 CREATE INDEX IF NOT EXISTS idx_bet_slip_user_id ON public.bet_slip(user_id);
 CREATE INDEX IF NOT EXISTS idx_bets_user_id ON public.bets(user_id);
 
--- Enable RLS
-ALTER TABLE public.bet_slip ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bets ENABLE ROW LEVEL SECURITY;
-
--- RLS Policies for bet_slip
-CREATE POLICY "Users can manage their own bet slip"
-ON public.bet_slip
-FOR ALL
-USING (auth.uid() = user_id);
-
--- RLS Policies for bets
-CREATE POLICY "Users can view their own bets"
-ON public.bets
-FOR SELECT
-USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can create their own bets"
-ON public.bets
-FOR INSERT
-WITH CHECK (auth.uid() = user_id);
+-- Index for performance
+CREATE INDEX IF NOT EXISTS idx_bet_slip_user_id ON public.bet_slip(user_id);
+CREATE INDEX IF NOT EXISTS idx_bets_user_id ON public.bets(user_id);

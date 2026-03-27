@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -147,10 +148,19 @@ const TOP_BETTORS = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const timeAgo = (iso: string) => {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `há ${diff}s`;
-  if (diff < 3600) return `há ${Math.floor(diff / 60)}m`;
-  return `há ${Math.floor(diff / 3600)}h`;
+  const date = new Date(iso);
+  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+  
+  let relative = "";
+  if (diff < 60) relative = `há ${diff}s`;
+  else if (diff < 3600) relative = `há ${Math.floor(diff / 60)}m`;
+  else if (diff < 86400) relative = `há ${Math.floor(diff / 3600)}h`;
+  else relative = `há ${Math.floor(diff / 86400)}d`;
+
+  const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  
+  return `${relative} · ${dateStr} ${timeStr}`;
 };
 
 const fetchWithTimeout = async (url: string, opts?: RequestInit, ms = 4000) => {
@@ -175,6 +185,7 @@ const PostCard = ({
   onLike: (id: string) => void;
 }) => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [liked, setLiked] = useState(false);
   const [localLikes, setLocalLikes] = useState(post.likes ?? 0);
   const [showComments, setShowComments] = useState(false);
@@ -184,7 +195,7 @@ const PostCard = ({
 
   const handleAction = (matchId?: string) => {
     if (!matchId) return;
-    window.location.href = `/?matchId=${matchId}&action=analyze`;
+    navigate(`/?matchId=${matchId}&action=analyze`);
   };
 
   const handleComment = async () => {
@@ -409,6 +420,7 @@ const PostCard = ({
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const Community = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<FeedPost[]>(SEED_POSTS);
   const [activeFilter, setActiveFilter] = useState<"hot" | "new" | "following" | "ia">("hot");
   const [postText, setPostText] = useState("");
@@ -515,18 +527,37 @@ const Community = () => {
 
   const filteredPosts = useMemo(() => {
     let base = [...posts];
-    if (activeFilter === "ia") base = base.filter(p => p.ai_validated);
-    if (activeFilter === "new") base.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    
+    // Sort by filter
+    if (activeFilter === "ia") {
+      base = base.filter(p => p.ai_validated);
+      // IA results sorted by score
+      base.sort((a, b) => b.ai_score - a.ai_score);
+    } else if (activeFilter === "hot") {
+      // Hot: More likes/comments first
+      base.sort((a, b) => {
+        const scoreA = (a.likes ?? 0) + (a.comments ?? 0) * 2;
+        const scoreB = (b.likes ?? 0) + (b.comments ?? 0) * 2;
+        return scoreB - scoreA;
+      });
+    } else if (activeFilter === "new") {
+      // New: Most recent first
+      base.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+    
     return base;
   }, [posts, activeFilter]);
 
   return (
     <main className="betmind-bg min-h-screen p-3 md:p-4">
       <section className="sportsbook-shell">
-        <aside className="sportsbook-sidebar md:sticky md:top-4 md:h-[calc(100vh-2rem)] md:overflow-y-auto space-y-5">
-          <div className="flex items-center gap-3 px-1">
-            <Users className="h-6 w-6 text-primary" />
-            <h1 className="text-lg font-black tracking-tight">Comunidade</h1>
+        <aside className="sportsbook-sidebar md:sticky md:top-4 md:h-[calc(100vh-2rem)] md:overflow-y-auto space-y-6">
+          <div className="space-y-4 mb-2">
+            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Devos da Sorte" className="w-[180px] mx-auto h-auto object-contain" />
+            <div className="flex items-center gap-3 px-1 justify-center">
+              <Users className="h-5 w-5 text-primary" />
+              <h1 className="text-lg font-black tracking-tight">Comunidade</h1>
+            </div>
           </div>
           <nav className="space-y-1">
             {["hot", "new", "ia"].map((f) => (
@@ -536,7 +567,7 @@ const Community = () => {
               </Button>
             ))}
           </nav>
-          <Button onClick={() => (window.location.href = "/")} variant="outline" className="w-full justify-start gap-2">
+          <Button onClick={() => navigate("/")} variant="outline" className="w-full justify-start gap-2">
             <ChevronRight className="h-4 w-4 rotate-180" /> Voltar
           </Button>
         </aside>

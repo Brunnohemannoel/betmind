@@ -1045,12 +1045,39 @@ Deno.serve(async (req) => {
       const homeStats = row.home_team_id ? teamStatsMap.get(row.home_team_id) : undefined;
       const awayStats = row.away_team_id ? teamStatsMap.get(row.away_team_id) : undefined;
 
+      // Retrieve per-match live stats parsed from the raw API response
+      const liveMatchData = normalizedByExternalId.get(row.external_match_id);
+      const liveStatsRaw = liveMatchData?.ai?.stats;
+      const liveAiInsights = liveMatchData?.ai; // Has intensity/goalProb from parseStats
+
+      const liveHomeOnTarget = liveStatsRaw?.home?.onTarget ?? 0;
+      const liveAwayOnTarget = liveStatsRaw?.away?.onTarget ?? 0;
+      const liveHomeCorners = liveStatsRaw?.home?.corners ?? 0;
+      const liveAwayCorners = liveStatsRaw?.away?.corners ?? 0;
+      const liveHomeDangerous = liveStatsRaw?.home?.dangerousAttacks ?? 0;
+      const liveAwayDangerous = liveStatsRaw?.away?.dangerousAttacks ?? 0;
+
+      const totalOnTarget = liveHomeOnTarget + liveAwayOnTarget;
+      const totalCorners = liveHomeCorners + liveAwayCorners;
+      const totalDangerous = liveHomeDangerous + liveAwayDangerous;
+
+      // Bonus from real in-game stats (shots on target have highest weight)
+      const liveIntensityBonus = Math.min(30, (totalOnTarget * 2.5) + (totalCorners * 1.2) + (totalDangerous * 0.4));
+
+      // Home vs away dominance from live stats (who's attacking more)
+      const homeAttackShare = totalOnTarget > 0
+        ? clamp01(liveHomeOnTarget / totalOnTarget)
+        : (liveHomeDangerous + liveAwayDangerous > 0
+          ? clamp01(liveHomeDangerous / (liveHomeDangerous + liveAwayDangerous))
+          : 0.5);
+      const awayAttackShare = 1 - homeAttackShare;
+
       const impliedHome = implied(row.odds_home);
       const impliedDraw = implied(row.odds_draw);
       const impliedAway = implied(row.odds_away);
 
-      const homeBoost = Number(homeStats?.win_rate ?? 0) * 0.16 + Number(homeStats?.avg_goals ?? 0) * 0.04;
-      const awayBoost = Number(awayStats?.win_rate ?? 0) * 0.16 + Number(awayStats?.avg_goals ?? 0) * 0.04;
+      const homeBoost = Number(homeStats?.win_rate ?? 0) * 0.16 + Number(homeStats?.avg_goals ?? 0) * 0.04 + homeAttackShare * 0.05;
+      const awayBoost = Number(awayStats?.win_rate ?? 0) * 0.16 + Number(awayStats?.avg_goals ?? 0) * 0.04 + awayAttackShare * 0.05;
 
       const pRaw = normalizeTriplet(
         impliedHome + homeBoost,
@@ -1063,17 +1090,19 @@ Deno.serve(async (req) => {
       const pressure = Math.round(
         Math.min(
           100,
-          38 + minute * 0.55 + (row.is_hot ? 20 : 0) + (scoreDiff <= 1 ? 8 : 0) + Number(homeStats?.avg_corners ?? 0) * 2,
+          38 + minute * 0.55 + (row.is_hot ? 20 : 0) + (scoreDiff <= 1 ? 8 : 0) + Number(homeStats?.avg_corners ?? 0) * 2 + liveIntensityBonus,
         ),
       );
-      const momentum = Math.round(Math.min(100, 25 + minute * 0.7 + (row.is_hot ? 15 : 0)));
-      const dominance = Math.round(Math.min(100, 40 + (pRaw.h - pRaw.a) * 80 + Number(homeStats?.win_rate ?? 0) * 20));
+      const momentum = Math.round(Math.min(100, 25 + minute * 0.7 + (row.is_hot ? 15 : 0) + Math.min(10, totalDangerous * 0.5)));
+      const dominance = Math.round(Math.min(100, 40 + (pRaw.h - pRaw.a) * 80 + Number(homeStats?.win_rate ?? 0) * 20 + homeAttackShare * 15 - 7));
 
-      const goalNext10 = clamp01(0.18 + pressure / 220 + (scoreDiff === 0 ? 0.09 : 0.03));
+      // Blend live goalProb (0-100 scale) into goalNext10
+      const liveGoalProbBoost = ((liveAiInsights?.goalProb ?? 0) / 100) * 0.15;
+      const goalNext10 = clamp01(0.18 + pressure / 220 + (scoreDiff === 0 ? 0.09 : 0.03) + liveGoalProbBoost);
       const over05 = clamp01(goalNext10 + 0.26);
-      const over15 = clamp01(goalNext10 + 0.12);
-      const over25 = clamp01(goalNext10 - 0.02 + Number(homeStats?.avg_goals ?? 0) * 0.05);
-      const cornerProb = clamp01(0.22 + Number(homeStats?.avg_corners ?? 0) * 0.08 + pressure / 300);
+      const over15 = clamp01(goalNext10 + 0.12 + liveGoalProbBoost * 0.5);
+      const over25 = clamp01(goalNext10 - 0.02 + Number(homeStats?.avg_goals ?? 0) * 0.05 + liveGoalProbBoost * 0.3);
+      const cornerProb = clamp01(0.22 + Number(homeStats?.avg_corners ?? 0) * 0.08 + pressure / 300 + totalCorners * 0.015);
       const cardProb = clamp01(0.2 + Number(homeStats?.avg_cards ?? 0) * 0.12 + minute / 250);
 
       const valueHome = row.odds_home ? pRaw.h > impliedHome + 0.05 : false;
@@ -1142,15 +1171,36 @@ Deno.serve(async (req) => {
         ...buildTimeAlerts({ timeContext, valueBet, maxEventChance }),
       ].filter((item): item is string => Boolean(item));
 
+      // Build per-match insight using live stats for unique descriptions
+      const liveStatsDesc = totalOnTarget > 0
+        ? `${totalOnTarget} chute(s) no gol, ${totalCorners} escanteio(s)` 
+        : totalDangerous > 0
+        ? `${totalDangerous} ataque(s) perigoso(s)`
+        : "dados em tempo real";
+
+      const dominantTeam = homeAttackShare > 0.58
+        ? (home?.name ?? "Mandante")
+        : homeAttackShare < 0.42
+        ? (away?.name ?? "Visitante")
+        : null;
+
       const insight = hotGame
-        ? `🔥 ${home?.name ?? "Mandante"} está empurrando o jogo: pressão ${pressure}% e chance real de ação imediata.`
-        : `📊 Leitura rápida: ritmo ${rhythm}, pressão ${pressure}% e jogo pronto para entrada oportunista.`;
+        ? `🔥 Jogo quente! ${dominantTeam ? dominantTeam + " dominando com " : "Pressão alta: "} ${liveStatsDesc}. Pressão ${pressure}% — entrada imediata recomendada.`
+        : comebackSignal
+        ? `⚡ Sinal de virada! ${liveStatsDesc} — ritmo ${rhythm}, time perdendo tem ${Math.round(pRaw.h * 100)}%/${Math.round(pRaw.a * 100)}% de reverter.`
+        : `📊 ${home?.name ?? "Casa"} vs ${away?.name ?? "Fora"}: ${liveStatsDesc}. Ritmo ${rhythm}, pressão ${pressure}%.`;
 
       let suggestion = "👉 Entrada recomendada: Over 1.5 gols";
       if (valueHome) suggestion = `👉 Entrada recomendada: Vitória ${home?.name ?? "mandante"}`;
       else if (valueAway) suggestion = `👉 Entrada recomendada: Vitória ${away?.name ?? "visitante"}`;
       else if (cornerProb >= 0.63) suggestion = "👉 Entrada recomendada: Over escanteios";
       else if (cardProb >= 0.6) suggestion = "👉 Entrada recomendada: Over cartões";
+      else if (totalCorners >= 7 && cornerProb >= 0.45) suggestion = "👉 Entrada recomendada: Over escanteios";
+      else if (totalOnTarget >= 5 && over25 >= 0.42) suggestion = "👉 Entrada recomendada: Ambas marcam (BTTS)";
+      else if (dominantTeam && homeAttackShare > 0.6) suggestion = `👉 Entrada recomendada: Vitória ${home?.name ?? "mandante"}`;
+      else if (dominantTeam && homeAttackShare < 0.4) suggestion = `👉 Entrada recomendada: Vitória ${away?.name ?? "visitante"}`;
+      else if (over15 >= 0.62) suggestion = "👉 Entrada recomendada: Over 1.5 gols";
+      else suggestion = "👉 Entrada recomendada: Over 0.5 gols HT";
 
       const tags = {
         hot: hotGame,
